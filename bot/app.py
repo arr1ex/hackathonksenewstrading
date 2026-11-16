@@ -102,6 +102,7 @@ def state():
         "settings": store.settings(),
         "events": store.recent_events(),
         "trades": store.trades(),
+        "stats": store.stats(),
         "status": status | {
             "exchange": trader.EXCHANGE,
             "mode": trader.MODE,

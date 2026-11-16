@@ -86,6 +86,15 @@ def recent_events(limit=100):
         return [dict(r) for r in con.execute("SELECT * FROM events ORDER BY id DESC LIMIT ?", (limit,))]
 
 
+def stats():
+    """All-time numbers for the dashboard: headline counts by status, and closed trades in order."""
+    with db() as con:
+        events = {r["status"]: r["n"] for r in con.execute("SELECT status, COUNT(*) n FROM events GROUP BY status")}
+        closed = [dict(r) for r in con.execute(
+            "SELECT ts, symbol, side, pnl FROM trades WHERE status='closed' ORDER BY id")]
+    return {"events": events, "closed": closed}
+
+
 def add_trade(**t):
     cols = ",".join(t)
     with db() as con:
