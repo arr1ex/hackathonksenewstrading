@@ -109,35 +109,69 @@ def open_trade(event_id, symbol, plan: risk.Plan, price, dry):
     )
 
 
-def close_now(t):
-    """Close one open trade at market (manual close from the dashboard)."""
+def close_now(t, reason="manual"):
+    """Close one open trade at market (manual close from the dashboard, or the time limit)."""
     price = pub.fetch_ticker(t["symbol"])["last"]
     if not t["dry"]:
         side = "sell" if t["side"] == "long" else "buy"
         ex.create_order(t["symbol"], "market", side, t["amount"], None, {"reduceOnly": True})
         _cancel_brackets(t["symbol"])
-    store.close_trade(t["id"], price, risk.pnl(t["side"], t["entry"], price, t["notional"]))
+    store.close_trade(t["id"], price, risk.pnl(t["side"], t["entry"], price, t["notional"]), reason)
 
 
-def sync_trades():
-    """Close paper trades that hit their stop/target; mark live trades the exchange has closed."""
+def sync_trades(max_hold_min):
+    """Close paper trades that hit their stop/target, mark live trades the exchange has closed,
+    and close anything held longer than max_hold_min (news impact fades)."""
     trades = store.trades("open")
     if not trades:
         return
+    now = pub.milliseconds()
     live = live_positions() if any(not t["dry"] for t in trades) else set()
+    failed = None
     for t in trades:
-        price = pub.fetch_ticker(t["symbol"])["last"]
-        long = t["side"] == "long"
-        exit_price = None
-        if t["dry"]:
-            # ponytail: checked once per poll on last price, so a paper fill is exact at
-            # the stop/target level even if price gapped through it between polls.
-            if (price <= t["sl"]) if long else (price >= t["sl"]):
-                exit_price = t["sl"]
-            elif (price >= t["tp"]) if long else (price <= t["tp"]):
-                exit_price = t["tp"]
-        elif t["symbol"] not in live:
-            exit_price = price  # ponytail: approximate; the real fill is in the exchange history
-            _cancel_brackets(t["symbol"])
-        if exit_price:
-            store.close_trade(t["id"], exit_price, risk.pnl(t["side"], t["entry"], exit_price, t["notional"]))
+        try:
+            _sync_one(t, live, now, max_hold_min)
+        except Exception as e:  # one unreachable symbol must not leave the other positions unchecked
+            failed = e
+    if failed:
+        raise failed
+
+
+def _sync_one(t, live, now, max_hold_min):
+    price = pub.fetch_ticker(t["symbol"])["last"]
+    long = t["side"] == "long"
+    exit_price = reason = None
+    if t["dry"]:
+        # ponytail: checked once per poll on last price, so a paper fill is exact at
+        # the stop/target level even if price gapped through it between polls.
+        if (price <= t["sl"]) if long else (price >= t["sl"]):
+            exit_price, reason = t["sl"], "stop"
+        elif (price >= t["tp"]) if long else (price <= t["tp"]):
+            exit_price, reason = t["tp"], "target"
+    elif t["symbol"] not in live:
+        exit_price = price  # ponytail: approximate; the real fill is in the exchange history
+        # ponytail: the exchange closed it; which bracket fired is inferred from the sign.
+        reason = "target" if risk.pnl(t["side"], t["entry"], price, t["notional"]) > 0 else "stop"
+        _cancel_brackets(t["symbol"])
+    if exit_price:
+        store.close_trade(t["id"], exit_price, risk.pnl(t["side"], t["entry"], exit_price, t["notional"]), reason)
+    elif now - t["ts"] > max_hold_min * 60_000:
+        close_now(t, "time")
+
+
+CHECKPOINTS = {"p5": 5, "p15": 15, "p60": 60}  # minutes after a decision
+
+
+def follow_up():
+    """Record where price went after each directional decision, traded or skipped."""
+    now = pub.milliseconds()
+    for d in store.pending_followups():
+        for col, minutes in CHECKPOINTS.items():
+            due = d["ts"] + minutes * 60_000
+            if d[col] is None and now >= due + 60_000:  # wait for that minute's candle to close
+                try:
+                    candles = pub.fetch_ohlcv(d["symbol"], "1m", since=due - 60_000, limit=1)
+                except Exception:
+                    break  # this symbol is unreachable right now; retried next poll, others continue
+                if candles:
+                    store.set_followup(d["id"], col, candles[0][4])

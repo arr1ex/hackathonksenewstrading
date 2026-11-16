@@ -54,6 +54,20 @@ Current sources:
    The model never chooses numbers.
 7. **Order**: market entry plus stop-loss and take-profit. If the stop can't be placed, the position is closed at once.
 
+## Exits
+
+A position closes when it hits its stop-loss or take-profit, when you press Close, or when it has
+been open longer than "Max holding time" (60 minutes by default), since the effect of news fades.
+
+## Self-review
+
+Every call the decision model makes is logged, traded or not, together with the market data it saw
+and the price 5, 15 and 60 minutes later. After every 10 closed trades (configurable) the model
+reviews them: what won, what lost, how positions were closed, and whether the calls it skipped
+would have paid. It writes up to five lessons, which are shown on the Review page and passed to
+the decision model with every later headline. Lessons only influence direction and confidence;
+size, leverage and stops stay in code. "Run review now" on the Review page triggers one early.
+
 ## Tests
 
 ```bash

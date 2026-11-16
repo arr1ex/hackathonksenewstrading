@@ -1,5 +1,6 @@
 """Web server + background trading loop. Run with: python -m bot.app"""
 import hashlib
+import json
 import pathlib
 import threading
 import time
@@ -10,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from . import analyzer, ingest, risk, store, trader
+from . import analyzer, ingest, review, risk, store, trader
 
 status = {"last_tick": None, "error": None, "feed_errors": {}}
 wake = threading.Event()
@@ -45,14 +46,23 @@ def process(s: store.Settings):
                 plan = risk.plan_trade(s, d.direction, d.confidence, d.already_priced_in, ctx["price"], symbol, held)
                 head = f"{symbol.split('/')[0]}: {d.direction} {d.confidence:.2f} — {d.reason}"
                 if isinstance(plan, str):
-                    notes.append(f"{head} → skipped: {plan}")
-                    continue
-                try:
-                    trader.open_trade(e["id"], symbol, plan, ctx["price"], s.dry_run)
-                    notes.append(f"{head} → {'paper ' if s.dry_run else ''}trade opened")
-                    traded = True
-                except Exception as err:
-                    notes.append(f"{head} → order failed: {err}")
+                    outcome = f"skipped: {plan}"
+                    notes.append(f"{head} → {outcome}")
+                else:
+                    try:
+                        trader.open_trade(e["id"], symbol, plan, ctx["price"], s.dry_run)
+                        outcome = "traded"
+                        notes.append(f"{head} → {'paper ' if s.dry_run else ''}trade opened")
+                        traded = True
+                    except Exception as err:
+                        outcome = f"order failed: {err}"[:200]
+                        notes.append(f"{head} → {outcome}")
+                # Every call is kept, traded or not, so reviews can see what the skipped ones would have done.
+                store.add_decision(
+                    ts=int(time.time() * 1000), event_id=e["id"], symbol=symbol, direction=d.direction,
+                    confidence=d.confidence, priced_in=int(d.already_priced_in), reason=d.reason,
+                    ctx=json.dumps(ctx), price=ctx["price"], outcome=outcome,
+                )
             store.set_event(e["id"], "traded" if traded else "skipped", "\n".join(notes))
         except Exception as err:
             store.set_event(e["id"], "error", f"{type(err).__name__}: {err}"[:300])
@@ -60,12 +70,21 @@ def process(s: store.Settings):
 
 def tick():
     s = store.settings()
-    status["feed_errors"] = ingest.poll()
-    try:
-        trader.sync_trades()
-    finally:  # an exchange hiccup while syncing must not stop new headlines being handled
-        if not s.paused:
-            process(s)
+    steps = [
+        lambda: status.update(feed_errors=ingest.poll()),
+        lambda: trader.sync_trades(s.max_hold_min),
+        trader.follow_up,
+        lambda: s.paused or process(s),
+        lambda: s.paused or review.run(),
+    ]
+    errors = []
+    for step in steps:  # one failing step (say, an exchange hiccup) must not stop the others
+        try:
+            step()
+        except Exception as e:
+            errors.append(f"{type(e).__name__}: {e}")
+    if errors:
+        raise RuntimeError(" | ".join(errors))
 
 
 def loop():
@@ -102,6 +121,9 @@ def state():
         "settings": store.settings(),
         "events": store.recent_events(),
         "trades": store.trades(),
+        "stats": store.stats(),
+        "decisions": store.decisions(),
+        "reviews": store.reviews(),
         "status": status | {
             "exchange": trader.EXCHANGE,
             "mode": trader.MODE,
@@ -128,6 +150,18 @@ def close_trade(trade_id: int):
     except Exception as e:
         raise HTTPException(502, f"{type(e).__name__}: {e}"[:300])
     return {"ok": True}
+
+
+@app.post("/api/review")
+def run_review():
+    """Review the closed trades waiting for one right now, without waiting for the usual count."""
+    try:
+        result = review.run(force=True)
+    except Exception as e:
+        raise HTTPException(502, f"{type(e).__name__}: {e}"[:300])
+    if not result:
+        raise HTTPException(400, "No closed trades are waiting for a review yet.")
+    return result
 
 
 class Headline(BaseModel):
