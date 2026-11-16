@@ -83,6 +83,11 @@ would have paid. It writes up to five lessons, which are shown on the Review pag
 the decision model with every later headline. Lessons only influence direction and confidence;
 size, leverage and stops stay in code. "Run review now" on the Review page triggers one early.
 
+
+##
+Кононов Дмитро - Пошук API для новин
+Онищенко Федір - Пошук API для новин та налаштування bybit API
+Мельник Нікіта - Пошук дизайн референсів, prompt engineer
 ## Tests
 
 ```bash
