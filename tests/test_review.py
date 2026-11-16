@@ -125,3 +125,11 @@ def test_one_unreachable_symbol_does_not_block_the_others(db, monkeypatch):
     with pytest.raises(KeyError):
         trader.sync_trades(60)
     assert {t["symbol"]: t["status"] for t in store.trades()} == {"DEAD/USDT:USDT": "open", "ETH/USDT:USDT": "closed"}
+
+
+def test_resolve_finds_stocks_and_small_coins(monkeypatch):
+    listed = ["BTC/USDT:USDT", "1000PEPE/USDT:USDT", "NVDAX/USDT:USDT", "TSLA/USDT:USDT"]
+    monkeypatch.setattr(trader, "markets", lambda: {s: {"active": True} for s in listed})
+    assert trader.resolve(["btc", "PEPE", "FAKE"]) == ["BTC/USDT:USDT", "1000PEPE/USDT:USDT"]
+    assert trader.resolve(["NVDA", "TSLA", "AAPL"], "stock") == ["NVDAX/USDT:USDT", "TSLA/USDT:USDT"]
+    assert trader.resolve(["NVDA"]) == []  # a crypto headline never lands on a stock token by accident

@@ -32,12 +32,14 @@ def markets():
     return (ex or pub).load_markets()
 
 
-def resolve(tickers):
-    """Model output like ["BNB", "pepe"] -> symbols that really exist as USDT perpetuals."""
+def resolve(tickers, kind="crypto"):
+    """Model output like ["BNB", "pepe"] or ["NVDA"] -> symbols that really exist as USDT perpetuals."""
     m, out = markets(), []
     for t in tickers:
         base = str(t).upper().split("/")[0].strip()
-        for sym in (f"{base}/USDT:USDT", f"1000{base}/USDT:USDT"):
+        # Exchanges list small-priced coins as 1000X and tokenised stocks with an X suffix (NVDAX).
+        names = (f"{base}X", base) if kind == "stock" else (base, f"1000{base}")
+        for sym in (f"{n}/USDT:USDT" for n in names):
             if sym in m and m[sym].get("active", True) and sym not in out:
                 out.append(sym)
                 break

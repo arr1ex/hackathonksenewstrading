@@ -23,6 +23,10 @@ feeds:
     title: title
     link: link
     published: pubDate
+  - name: MarketWatch
+    url: https://feeds.content.dowjones.io/public/rss/mw_topstories
+  - name: MarketWatch Pulse
+    url: https://feeds.content.dowjones.io/public/rss/mw_marketpulse
   - name: Cointelegraph
     url: https://cointelegraph.com/rss
   - name: Decrypt
