@@ -1,7 +1,7 @@
 # News Trading Bot
 
 Reads news feeds every minute, asks an LLM whether a headline is worth trading, and opens
-futures positions on crypto and on major stocks with a stop-loss and take-profit. Runs locally with a small dashboard.
+futures positions on crypto (and optionally on major stocks) with a stop-loss and take-profit. Runs locally with a small dashboard.
 
 ## Run it
 
