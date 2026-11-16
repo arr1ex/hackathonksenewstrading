@@ -1,0 +1,9 @@
+ccxt
+feedparser
+fastapi
+uvicorn
+pydantic
+pyyaml
+httpx
+python-dotenv
+pytest
