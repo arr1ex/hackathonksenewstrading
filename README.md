@@ -47,6 +47,7 @@ Current sources:
 
 1. **Ingest** (`bot/ingest.py`): poll all feeds, drop headlines already seen or older than the age limit.
 2. **Triage** (`bot/analyzer.py`): one cheap model call for the whole batch: is it market-moving, and for which coins?
+   A story another source already brought is marked as a duplicate and goes no further.
 3. **Validate** (`bot/trader.py`): keep only coins that exist as USDT perpetuals on the exchange.
 4. **Market context**: price, 24h change, move since the headline, volume, funding rate.
 5. **Decision**: the stronger model returns direction, confidence and whether the move is already priced in.

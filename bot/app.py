@@ -31,8 +31,13 @@ def process(s: store.Settings):
     if not fresh:
         return
 
-    for e, t in zip(fresh, analyzer.triage(fresh)):
+    for e, t in zip(fresh, analyzer.triage(fresh, store.handled_titles())):
         try:
+            # Another source already brought this story: don't pay to decide twice.
+            # Hand-typed test headlines are exempt so the same demo can be repeated.
+            if t.relevant and t.duplicate and e["source"] != "manual":
+                store.set_event(e["id"], "duplicate", "same story as an earlier headline")
+                continue
             if t.relevant and t.kind == "stock" and not s.trade_stocks:
                 store.set_event(e["id"], "irrelevant", f"stock news {t.symbols}; stock trading is switched off")
                 continue
