@@ -12,6 +12,7 @@ DB_PATH = os.getenv("BOT_DB", "bot.db")
 class Settings(BaseModel):
     paused: bool = False
     dry_run: bool = True  # paper trades only; nothing is sent to the exchange
+    trade_stocks: bool = False  # off: stock headlines are ignored (see README, "Stocks")
     max_trade_usd: float = Field(100, gt=0)  # max margin put into one trade
     max_leverage: int = Field(3, ge=1, le=50)
     max_loss_usd: float = Field(10, gt=0)  # max loss per trade; sets the stop-loss distance

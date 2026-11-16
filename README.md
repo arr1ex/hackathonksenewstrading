@@ -1,7 +1,7 @@
 # News Trading Bot
 
 Reads news feeds every minute, asks an LLM whether a headline is worth trading, and opens
-futures positions on crypto and on major stocks with a stop-loss and take-profit. Runs locally with a small dashboard.
+futures positions on crypto (and optionally on major stocks) with a stop-loss and take-profit. Runs locally with a small dashboard.
 
 ## Run it
 
@@ -53,6 +53,20 @@ Current sources:
 6. **Risk engine** (`bot/risk.py`): plain code sets size, leverage, stop and target from your settings.
    The model never chooses numbers.
 7. **Order**: market entry plus stop-loss and take-profit. If the stop can't be placed, the position is closed at once.
+
+## Stocks
+
+The bot can also trade major stocks that the exchange lists as futures (for example NVDA), but this
+is **switched off by default** ("Trade stocks" in Settings).
+
+Known issue on the current Bybit demo account: Bybit requires an extra agreement to be signed before
+trading stock contracts, and signing it fails with **error 10032**. Until that is resolved, stock
+orders sent through the API are refused with error 110126 ("You must sign the required agreement
+before trading this contract").
+
+To try stocks again once the agreement can be signed: switch "Trade stocks" on, uncomment the
+MarketWatch feeds in `feeds.yaml`, and run `python -m scripts.find_market NVDA` to confirm the
+market is listed. With dry run on, stock paper trades work regardless.
 
 ## Exits
 
