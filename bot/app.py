@@ -33,6 +33,9 @@ def process(s: store.Settings):
 
     for e, t in zip(fresh, analyzer.triage(fresh)):
         try:
+            if t.relevant and t.kind == "stock" and not s.trade_stocks:
+                store.set_event(e["id"], "irrelevant", f"stock news {t.symbols}; stock trading is switched off")
+                continue
             symbols = trader.resolve(t.symbols, t.kind) if t.relevant else []
             if not symbols:
                 note = f"no tradable market for {t.symbols}" if t.relevant and t.symbols else ""
