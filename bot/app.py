@@ -68,10 +68,28 @@ def process(s: store.Settings):
             store.set_event(e["id"], "error", f"{type(err).__name__}: {err}"[:300])
 
 
+feed_failures = {}  # feed name -> consecutive failed polls
+FEED_ALERT_AFTER = 3
+
+
+def poll_feeds():
+    """Poll the feeds; report one as broken only after several misses in a row.
+    A single timeout is normal and the next poll picks up whatever was missed."""
+    errors = ingest.poll()
+    for name in list(feed_failures):
+        if name not in errors:
+            del feed_failures[name]
+    for name in errors:
+        feed_failures[name] = feed_failures.get(name, 0) + 1
+    status["feed_errors"] = {
+        n: f"{e} ({feed_failures[n]} polls in a row)" for n, e in errors.items() if feed_failures[n] >= FEED_ALERT_AFTER
+    }
+
+
 def tick():
     s = store.settings()
     steps = [
-        lambda: status.update(feed_errors=ingest.poll()),
+        poll_feeds,
         lambda: trader.sync_trades(s.max_hold_min),
         trader.follow_up,
         lambda: s.paused or process(s),
