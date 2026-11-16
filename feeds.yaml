@@ -1,0 +1,33 @@
+# News sources. This is the only file you need to edit to add a source.
+# The bot re-reads it on every poll, so no restart is needed.
+#
+# RSS / Atom feed:
+#   - name: CoinDesk
+#     url: https://example.com/rss
+#
+# JSON API (dotted paths into the response; ${VARS} are read from .env):
+#   - name: Some API
+#     type: json
+#     url: https://api.example.com/news?token=${SOME_API_KEY}
+#     headers: {Authorization: "Bearer ${SOME_API_KEY}"}   # optional
+#     items: data.results      # path to the list of articles ("" if the response is the list)
+#     title: title             # field holding the headline
+#     link: url                # field holding the article link
+#     published: published_at  # ISO date or unix timestamp (optional)
+
+feeds:
+  - name: cryptocurrency.cv
+    type: json
+    url: https://cryptocurrency.cv/api/news
+    items: articles
+    title: title
+    link: link
+    published: pubDate
+  - name: Cointelegraph
+    url: https://cointelegraph.com/rss
+  - name: Decrypt
+    url: https://decrypt.co/feed
+  - name: The Block
+    url: https://www.theblock.co/rss.xml
+  - name: CoinDesk
+    url: https://www.coindesk.com/arc/outboundfeeds/rss/

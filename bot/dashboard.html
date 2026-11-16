@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>News Trading Bot</title>
+<style>
+  :root { --bg:#0e1116; --panel:#161b22; --line:#262d37; --text:#e6e9ee; --dim:#8b95a3;
+          --green:#3fb950; --red:#f85149; --amber:#d29922; --blue:#58a6ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui, sans-serif; }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:14px 20px; border-bottom:1px solid var(--line); }
+  h1 { font-size:16px; margin:0 auto 0 0; }
+  h2 { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); margin:0 0 10px; }
+  main { display:grid; grid-template-columns:280px 1fr; gap:16px; padding:16px 20px; }
+  main > div { min-width:0; }
+  @media (max-width: 800px) { main { grid-template-columns:1fr; padding:16px; } }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; margin-bottom:16px; }
+  label { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; color:var(--dim); }
+  input[type=number] { width:84px; }
+  input, button { font:inherit; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
+  button { cursor:pointer; background:#21262d; }
+  button:hover { border-color:var(--dim); }
+  button.close { padding:1px 8px; font-size:12px; margin-left:6px; }
+  button.primary { background:var(--blue); color:#06101c; border-color:var(--blue); font-weight:600; }
+  .row { display:flex; gap:8px; }
+  .row input { flex:1; min-width:0; }
+  .scroll { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font-weight:500; color:var(--dim); font-size:12px; }
+  th, td { padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  td.nowrap { white-space:nowrap; }
+  a { color:var(--text); }
+  .note { color:var(--dim); white-space:pre-wrap; margin-top:2px; }
+  .tag { display:inline-block; padding:1px 7px; border-radius:10px; font-size:12px; border:1px solid var(--line); color:var(--dim); white-space:nowrap; }
+  .tag.traded, .tag.long, .tag.on { color:var(--green); border-color:var(--green); }
+  .tag.error, .tag.short, .tag.off { color:var(--red); border-color:var(--red); }
+  .tag.skipped, .tag.new, .tag.warn { color:var(--amber); border-color:var(--amber); }
+  .pos { color:var(--green); } .neg { color:var(--red); }
+  .dim { color:var(--dim); }
+  #err { color:var(--red); padding:0 20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>News Trading Bot</h1>
+  <span id="badges"></span>
+  <button id="pause"></button>
+</header>
+<div id="err"></div>
+<main>
+  <div>
+    <section>
+      <h2>Risk settings</h2>
+      <form id="form">
+        <label>Dry run (paper trades) <input type="checkbox" name="dry_run"></label>
+        <label>Max margin per trade, $ <input type="number" name="max_trade_usd" step="any" min="1"></label>
+        <label>Max leverage <input type="number" name="max_leverage" min="1" max="50"></label>
+        <label>Max loss per trade, $ <input type="number" name="max_loss_usd" step="any" min="0.1"></label>
+        <label>Take-profit : stop ratio <input type="number" name="reward_risk" step="any" min="0.1"></label>
+        <label>Min confidence (0–1) <input type="number" name="min_confidence" step="0.05" min="0" max="1"></label>
+        <label>Max open positions <input type="number" name="max_open_positions" min="1"></label>
+        <label>Ignore news older than, min <input type="number" name="max_news_age_min" min="1"></label>
+        <label>Poll every, seconds <input type="number" name="poll_seconds" min="10"></label>
+        <button class="primary" type="submit">Save</button> <span id="saved" class="dim"></span>
+      </form>
+    </section>
+    <section>
+      <h2>Test a headline</h2>
+      <form id="inject" class="row">
+        <input name="title" placeholder="Binance confirms $500M hack" required>
+        <button type="submit">Send</button>
+      </form>
+    </section>
+    <section>
+      <h2>Status</h2>
+      <div id="status" class="dim"></div>
+    </section>
+  </div>
+  <div>
+    <section>
+      <h2>Trades</h2>
+      <div class="scroll"><table>
+        <thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th class="num">Size $</th><th class="num">Entry</th>
+          <th class="num">Stop</th><th class="num">Target</th><th>State</th><th class="num">PnL $</th></tr></thead>
+        <tbody id="trades"></tbody>
+      </table></div>
+    </section>
+    <section>
+      <h2>Headlines</h2>
+      <div class="scroll"><table>
+        <thead><tr><th>Time</th><th>Source</th><th>Headline and decision</th><th>Result</th></tr></thead>
+        <tbody id="events"></tbody>
+      </table></div>
+    </section>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const time = ms => ms ? new Date(ms).toLocaleTimeString() : "–";
+const num = n => n == null ? "–" : Number(n).toLocaleString(undefined, {maximumSignificantDigits: 6});
+let settings = null, formLoaded = false;
+
+async function post(path, body) {
+  const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  if (!r.ok) throw new Error((await r.text()).slice(0, 300));
+  return r.json();
+}
+
+function fillForm(s) {
+  for (const el of $("form").elements) {
+    if (!el.name) continue;
+    if (el.type === "checkbox") el.checked = s[el.name]; else el.value = s[el.name];
+  }
+}
+
+async function refresh() {
+  let d;
+  try { d = await (await fetch("/api/state")).json(); $("err").textContent = ""; }
+  catch (e) { $("err").textContent = "Bot is not responding."; return; }
+  settings = d.settings;
+  if (!formLoaded) { fillForm(settings); formLoaded = true; }
+  const st = d.status;
+
+  $("pause").textContent = settings.paused ? "Resume trading" : "Pause trading";
+  $("badges").innerHTML =
+    `<span class="tag ${settings.paused ? "off" : "on"}">${settings.paused ? "paused" : "running"}</span> ` +
+    `<span class="tag ${settings.dry_run ? "warn" : "on"}">${settings.dry_run ? "dry run" : esc(st.mode) + " orders"}</span>`;
+
+  const feedErrs = Object.entries(st.feed_errors || {});
+  $("status").innerHTML =
+    `Exchange: ${esc(st.exchange)} (${esc(st.mode)})<br>` +
+    `Exchange keys: ${st.has_keys ? "loaded" : "none — dry run only"}<br>` +
+    `Models: ${esc(st.models.join(", "))}<br>` +
+    `Last poll: ${time(st.last_tick)}` +
+    (st.error ? `<br><span class="neg">Loop error: ${esc(st.error)}</span>` : "") +
+    feedErrs.map(([n, e]) => `<br><span class="neg">Feed ${esc(n)}: ${esc(e)}</span>`).join("");
+
+  $("trades").innerHTML = d.trades.map(t => `<tr>
+    <td class="nowrap">${time(t.ts)}</td><td class="nowrap">${esc(t.symbol.split(":")[0])}</td>
+    <td><span class="tag ${esc(t.side)}">${esc(t.side)} ${t.leverage}x</span></td>
+    <td class="num">${num(t.notional)}</td><td class="num">${num(t.entry)}</td>
+    <td class="num">${num(t.sl)}</td><td class="num">${num(t.tp)}</td>
+    <td class="nowrap">${esc(t.status)}${t.dry ? ' <span class="dim">paper</span>' : ""}${t.status === "open" ? ` <button class="close" data-id="${t.id}">Close</button>` : ""}</td>
+    <td class="num ${t.pnl > 0 ? "pos" : t.pnl < 0 ? "neg" : ""}">${t.pnl == null ? "–" : num(t.pnl)}</td></tr>`).join("")
+    || `<tr><td colspan="9" class="dim">No trades yet.</td></tr>`;
+
+  $("events").innerHTML = d.events.map(e => {
+    const title = /^https?:\/\//.test(e.url) ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.title)}</a>` : esc(e.title);
+    return `<tr><td class="nowrap">${time(e.published_ms || e.ts)}</td><td class="nowrap dim">${esc(e.source)}</td>
+      <td>${title}${e.note ? `<div class="note">${esc(e.note)}</div>` : ""}</td>
+      <td><span class="tag ${esc(e.status)}">${esc(e.status)}</span></td></tr>`;
+  }).join("") || `<tr><td colspan="4" class="dim">No headlines yet.</td></tr>`;
+}
+
+async function save(patch, msg) {
+  try {
+    settings = await post("/api/settings", {...settings, ...patch});
+    fillForm(settings);
+    $("saved").textContent = msg;
+  } catch (e) { $("saved").textContent = "Not saved: " + e.message; }
+  setTimeout(() => $("saved").textContent = "", 4000);
+  refresh();
+}
+
+$("form").onsubmit = e => {
+  e.preventDefault();
+  const patch = {};
+  for (const el of e.target.elements) if (el.name) patch[el.name] = el.type === "checkbox" ? el.checked : Number(el.value);
+  save(patch, "Saved");
+};
+// Dry run is a safety switch: apply it the moment it is toggled, no Save needed.
+$("form").elements.dry_run.onchange = e => save({dry_run: e.target.checked}, e.target.checked ? "Dry run on" : "Dry run off: orders go to the exchange");
+$("trades").onclick = async e => {
+  const id = e.target.dataset.id;
+  if (!id) return;
+  e.target.disabled = true;
+  try { await post(`/api/trades/${id}/close`, {}); $("err").textContent = ""; }
+  catch (err) { $("err").textContent = "Close failed: " + err.message; }
+  refresh();
+};
+$("pause").onclick = () => save({paused: !settings.paused}, "");
+$("inject").onsubmit = async e => {
+  e.preventDefault();
+  await post("/api/headline", {title: e.target.title.value});
+  e.target.reset();
+  setTimeout(refresh, 500);
+};
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>
