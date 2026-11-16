@@ -96,8 +96,8 @@ def poll():
                 # No timestamp: treat as breaking only if we've polled this feed before,
                 # otherwise the whole backlog would look fresh on first run.
                 published = now if known else 0
-            # ponytail: dedupe is per link/title, so the same story from two sources is
-            # analysed twice (the one-position-per-symbol rule stops a double trade).
+            # Exact repeats are dropped here by link; the same story reworded by another
+            # source is caught later by the screening model (see analyzer.triage).
             uid = hashlib.sha1((link or title).encode()).hexdigest()
             store.add_event(uid, name, title, link, published)
     return errors

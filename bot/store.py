@@ -93,6 +93,14 @@ def new_events():
         return [dict(r) for r in con.execute("SELECT * FROM events WHERE status='new' ORDER BY id")]
 
 
+def handled_titles(minutes=60, limit=20):
+    """Headlines that already reached the decision step recently, for spotting repeats of a story."""
+    since = int(time.time() * 1000) - minutes * 60_000
+    q = "SELECT title FROM events WHERE status IN ('traded', 'skipped') AND ts > ? ORDER BY id DESC LIMIT ?"
+    with db() as con:
+        return [r["title"] for r in con.execute(q, (since, limit))]
+
+
 def set_event(event_id, status, note=""):
     with db() as con:
         con.execute("UPDATE events SET status=?, note=? WHERE id=?", (status, note, event_id))

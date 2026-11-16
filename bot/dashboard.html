@@ -355,7 +355,7 @@ const time = ms => {
 const num = n => n == null ? "–" : Number(n).toLocaleString(undefined, {maximumSignificantDigits: 6});
 const usd = (n, sign) => (n < 0 ? "−" : sign && n > 0 ? "+" : "") + "$" + Math.abs(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
 const icon = n => `<svg class="i"><use href="#i-${n}"/></svg>`;
-const STATUS = {traded: "good", skipped: "warn", error: "bad", new: "info", irrelevant: "", stale: ""};
+const STATUS = {traded: "good", skipped: "warn", error: "bad", new: "info", irrelevant: "", stale: "", duplicate: ""};
 let settings = null, formLoaded = false, data = null, filter = "all";
 
 // Only touch the DOM when the markup really changed, so hover, selection and clicks survive polling.
@@ -456,7 +456,7 @@ function render(d) {
 
   const analysed = d.events.filter(e => e.status !== "stale");
   put("events-mini", analysed.slice(0, 5).map(e => eventRow(e)).join("") || `<tr><td class="dim">No fresh headlines yet.</td></tr>`);
-  const present = ["all", ...["traded", "skipped", "irrelevant", "stale", "error", "new"].filter(k => d.events.some(e => e.status === k))];
+  const present = ["all", ...["traded", "skipped", "duplicate", "irrelevant", "stale", "error", "new"].filter(k => d.events.some(e => e.status === k))];
   if (!present.includes(filter)) filter = "all";
   put("chips", present.map(k => `<button class="chip" data-filter="${k}" aria-pressed="${k === filter}">${k[0].toUpperCase() + k.slice(1)}</button>`).join(""));
   const shown = d.events.filter(e => filter === "all" || e.status === filter);

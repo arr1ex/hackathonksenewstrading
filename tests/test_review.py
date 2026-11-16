@@ -133,3 +133,47 @@ def test_resolve_finds_stocks_and_small_coins(monkeypatch):
     assert trader.resolve(["btc", "PEPE", "FAKE"]) == ["BTC/USDT:USDT", "1000PEPE/USDT:USDT"]
     assert trader.resolve(["NVDA", "TSLA", "AAPL"], "stock") == ["NVDAX/USDT:USDT", "TSLA/USDT:USDT"]
     assert trader.resolve(["NVDA"]) == []  # a crypto headline never lands on a stock token by accident
+
+
+def test_duplicate_story_skips_the_decision_step(db, monkeypatch):
+    from bot import app
+
+    now = int(time.time() * 1000)
+    store.add_event("a", "CoinDesk", "Binance confirms $570M hack", "", now)
+    store.set_event(1, "traded")
+    store.add_event("b", "Decrypt", "Hackers drain $570M from Binance", "", now)
+    seen = {}
+
+    def fake_triage(events, handled):
+        seen["handled"] = list(handled)
+        return [analyzer.TriageItem(i=0, relevant=True, duplicate=True, symbols=["BNB"])]
+
+    monkeypatch.setattr(analyzer, "triage", fake_triage)
+    monkeypatch.setattr(analyzer, "decide", lambda *a: pytest.fail("a duplicate must not reach the decision model"))
+    app.process(store.settings())
+    assert seen["handled"] == ["Binance confirms $570M hack"]
+    assert store.recent_events()[0]["status"] == "duplicate"
+
+
+def test_llm_asks_again_when_the_reply_is_not_valid_json(monkeypatch):
+    replies = iter(['{"direction": "long", "confidence": 0.8, "reason": "an "emergency" cut"}',
+                    '{"direction": "long", "confidence": 0.8, "reason": "an emergency cut"}'])
+    sent = []
+
+    class Response:
+        def __init__(self, text):
+            self.text = text
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"message": {"content": self.text}}]}
+
+    def fake_post(url, headers, json, timeout):
+        sent.append(len(json["messages"]))
+        return Response(next(replies))
+
+    monkeypatch.setattr(analyzer.httpx, "post", fake_post)
+    d = analyzer.llm("m", "s", "u", analyzer.Decision)
+    assert d.confidence == 0.8 and sent == [2, 4]  # second call carries the bad reply and the correction
