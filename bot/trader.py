@@ -5,7 +5,7 @@ import ccxt
 
 from . import risk, store
 
-EXCHANGE = os.getenv("EXCHANGE", "binanceusdm")
+EXCHANGE = os.getenv("EXCHANGE", "bybit")
 MODE = os.getenv("EXCHANGE_MODE", "demo")
 KEY, SECRET = os.getenv("EXCHANGE_API_KEY"), os.getenv("EXCHANGE_SECRET")
 
@@ -55,6 +55,23 @@ def open_symbols():
     return {t["symbol"] for t in store.trades("open")} | live_positions()
 
 
+def _set_leverage(leverage, symbol):
+    try:
+        ex.set_leverage(leverage, symbol)
+    except ccxt.BadRequest as e:
+        if "not modified" not in str(e).lower():  # Bybit errors when leverage is already at this value
+            raise
+
+
+def _cancel_brackets(symbol):
+    """Remove leftover stop-loss / take-profit orders for a symbol."""
+    for params in ({}, {"trigger": True}):  # Bybit keeps trigger orders in a separate list
+        try:
+            ex.cancel_all_orders(symbol, params)
+        except Exception:
+            pass  # nothing to cancel, or the exchange has no separate trigger list
+
+
 def open_trade(event_id, symbol, plan: risk.Plan, price, dry):
     """Place the entry with stop-loss and take-profit, and record it. Raises on failure."""
     market = markets()[symbol]
@@ -68,7 +85,7 @@ def open_trade(event_id, symbol, plan: risk.Plan, price, dry):
         if not ex:
             raise RuntimeError("no exchange keys in .env; switch dry-run on")
         buy, sell = ("buy", "sell") if plan.side == "long" else ("sell", "buy")
-        ex.set_leverage(plan.leverage, symbol)
+        _set_leverage(plan.leverage, symbol)
         order = ex.create_order(symbol, "market", buy, amount)
         price = order.get("average") or price
         try:
@@ -77,7 +94,7 @@ def open_trade(event_id, symbol, plan: risk.Plan, price, dry):
         except Exception:
             # Never leave a position without a stop: close it and re-raise.
             ex.create_order(symbol, "market", sell, amount, None, {"reduceOnly": True})
-            ex.cancel_all_orders(symbol)
+            _cancel_brackets(symbol)
             raise
 
     store.add_trade(
@@ -105,6 +122,6 @@ def sync_trades():
                 exit_price = t["tp"]
         elif t["symbol"] not in live:
             exit_price = price  # ponytail: approximate; the real fill is in the exchange history
-            ex.cancel_all_orders(t["symbol"])  # remove the leftover bracket order
+            _cancel_brackets(t["symbol"])
         if exit_price:
             store.close_trade(t["id"], exit_price, risk.pnl(t["side"], t["entry"], exit_price, t["notional"]))

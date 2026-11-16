@@ -24,7 +24,9 @@ pipeline run.
 3. Restart the bot and untick "Dry run" in the dashboard.
 
 Only fake-money modes (`demo`, `testnet`) are supported. The account must be in one-way
-position mode (the Binance default), not hedge mode.
+position mode (the default on Bybit and Binance), not hedge mode.
+
+The exchange is Bybit by default; set `EXCHANGE=binanceusdm` in `.env` to use Binance instead.
 
 ## Adding news sources
 

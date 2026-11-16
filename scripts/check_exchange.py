@@ -14,8 +14,8 @@ print(f"exchange={trader.EXCHANGE} mode={trader.MODE}")
 try:
     print("USDT balance:", ex.fetch_balance()["USDT"])
     price = ex.fetch_ticker(SYMBOL)["last"]
-    # A short (sell) limit 20% above market: proves the key can short, and will not fill.
-    limit = float(ex.price_to_precision(SYMBOL, price * 1.2))
+    # A short (sell) limit 4% above market: proves the key can short, and will not fill.
+    limit = float(ex.price_to_precision(SYMBOL, price * 1.04))
     amount = float(ex.amount_to_precision(SYMBOL, 10 / price))
     order = ex.create_order(SYMBOL, "limit", "sell", amount, limit)
     print(f"placed short limit order {order['id']}: {amount} BNB @ {limit}")
@@ -25,8 +25,8 @@ except Exception as e:
     print(f"\nFAILED: {type(e).__name__}: {e}")
     print(
         "\nIf this is an auth error, the key probably doesn't match EXCHANGE_MODE:\n"
-        "  EXCHANGE_MODE=demo     keys from Binance Demo Trading (demo.binance.com)\n"
-        "  EXCHANGE_MODE=testnet  keys from the futures testnet\n"
-        "Spot testnet keys (testnet.binance.vision) cannot trade futures at all."
+        "  EXCHANGE_MODE=demo     keys created while in Demo Trading on the main site\n"
+        "  EXCHANGE_MODE=testnet  keys from the separate testnet site\n"
+        "Also check the key has contract/derivatives trading permission."
     )
     raise SystemExit(1)
