@@ -33,7 +33,7 @@ def process(s: store.Settings):
 
     for e, t in zip(fresh, analyzer.triage(fresh)):
         try:
-            symbols = trader.resolve(t.symbols) if t.relevant else []
+            symbols = trader.resolve(t.symbols, t.kind) if t.relevant else []
             if not symbols:
                 note = f"no tradable market for {t.symbols}" if t.relevant and t.symbols else ""
                 store.set_event(e["id"], "irrelevant", note)
@@ -42,7 +42,7 @@ def process(s: store.Settings):
             for symbol in symbols[:2]:
                 held = trader.open_symbols(s.dry_run)
                 ctx = analyzer.market_context(symbol, e["published_ms"])
-                d = analyzer.decide(e, symbol, ctx, symbol in held)
+                d = analyzer.decide(e, symbol, ctx, symbol in held, t.kind)
                 plan = risk.plan_trade(s, d.direction, d.confidence, d.already_priced_in, ctx["price"], symbol, held)
                 head = f"{symbol.split('/')[0]}: {d.direction} {d.confidence:.2f} — {d.reason}"
                 if isinstance(plan, str):
