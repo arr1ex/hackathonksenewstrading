@@ -6,7 +6,7 @@ import time
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -116,6 +116,18 @@ def update_settings(s: store.Settings):
     store.save_settings(s)
     wake.set()
     return s
+
+
+@app.post("/api/trades/{trade_id}/close")
+def close_trade(trade_id: int):
+    t = next((t for t in store.trades("open") if t["id"] == trade_id), None)
+    if not t:
+        raise HTTPException(404, "trade is not open")
+    try:
+        trader.close_now(t)
+    except Exception as e:
+        raise HTTPException(502, f"{type(e).__name__}: {e}"[:300])
+    return {"ok": True}
 
 
 class Headline(BaseModel):

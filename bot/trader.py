@@ -109,6 +109,16 @@ def open_trade(event_id, symbol, plan: risk.Plan, price, dry):
     )
 
 
+def close_now(t):
+    """Close one open trade at market (manual close from the dashboard)."""
+    price = pub.fetch_ticker(t["symbol"])["last"]
+    if not t["dry"]:
+        side = "sell" if t["side"] == "long" else "buy"
+        ex.create_order(t["symbol"], "market", side, t["amount"], None, {"reduceOnly": True})
+        _cancel_brackets(t["symbol"])
+    store.close_trade(t["id"], price, risk.pnl(t["side"], t["entry"], price, t["notional"]))
+
+
 def sync_trades():
     """Close paper trades that hit their stop/target; mark live trades the exchange has closed."""
     trades = store.trades("open")
