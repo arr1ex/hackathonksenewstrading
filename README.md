@@ -35,6 +35,14 @@ Examples are at the top of the file. The bot re-reads it on every poll, so no re
 and a broken feed shows up under Status on the dashboard without stopping the others.
 API keys for sources go in `.env` and are referenced as `${NAME}` in `feeds.yaml`.
 
+Current sources:
+
+- https://cryptocurrency.cv/api/news (JSON API)
+- https://www.coindesk.com/arc/outboundfeeds/rss/
+- https://cointelegraph.com/rss
+- https://decrypt.co/feed
+- https://www.theblock.co/rss.xml
+
 ## How a headline becomes a trade
 
 1. **Ingest** (`bot/ingest.py`): poll all feeds, drop headlines already seen or older than the age limit.

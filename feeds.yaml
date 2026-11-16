@@ -16,6 +16,13 @@
 #     published: published_at  # ISO date or unix timestamp (optional)
 
 feeds:
+  - name: cryptocurrency.cv
+    type: json
+    url: https://cryptocurrency.cv/api/news
+    items: articles
+    title: title
+    link: link
+    published: pubDate
   - name: Cointelegraph
     url: https://cointelegraph.com/rss
   - name: Decrypt
