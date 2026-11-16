@@ -11,7 +11,7 @@ KEY, SECRET = os.getenv("EXCHANGE_API_KEY"), os.getenv("EXCHANGE_SECRET")
 
 
 def _client(auth):
-    opts = {"enableRateLimit": True, "options": {"defaultType": "swap"}}
+    opts = {"enableRateLimit": True, "timeout": 30_000, "options": {"defaultType": "swap"}}
     if auth:
         opts |= {"apiKey": KEY, "secret": SECRET}
     ex = getattr(ccxt, EXCHANGE)(opts)
@@ -48,11 +48,17 @@ def live_positions():
     """Symbols with an open position on the exchange."""
     if not ex:
         return set()
-    return {p["symbol"] for p in ex.fetch_positions() if p.get("contracts")}
+    try:
+        positions = ex.fetch_positions()
+    except ccxt.NetworkError:
+        positions = ex.fetch_positions()  # one retry: demo endpoints time out now and then
+    return {p["symbol"] for p in positions if p.get("contracts")}
 
 
-def open_symbols():
-    return {t["symbol"] for t in store.trades("open")} | live_positions()
+def open_symbols(dry):
+    """Symbols we already hold. Paper mode never touches the private exchange API."""
+    held = {t["symbol"] for t in store.trades("open")}
+    return held if dry else held | live_positions()
 
 
 def _set_leverage(leverage, symbol):
@@ -108,7 +114,7 @@ def sync_trades():
     trades = store.trades("open")
     if not trades:
         return
-    live = live_positions()
+    live = live_positions() if any(not t["dry"] for t in trades) else set()
     for t in trades:
         price = pub.fetch_ticker(t["symbol"])["last"]
         long = t["side"] == "long"

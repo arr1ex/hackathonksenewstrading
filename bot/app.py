@@ -39,7 +39,7 @@ def process(s: store.Settings):
                 continue
             notes, traded = [], False
             for symbol in symbols[:2]:
-                held = trader.open_symbols()
+                held = trader.open_symbols(s.dry_run)
                 ctx = analyzer.market_context(symbol, e["published_ms"])
                 d = analyzer.decide(e, symbol, ctx, symbol in held)
                 plan = risk.plan_trade(s, d.direction, d.confidence, d.already_priced_in, ctx["price"], symbol, held)
@@ -61,9 +61,11 @@ def process(s: store.Settings):
 def tick():
     s = store.settings()
     status["feed_errors"] = ingest.poll()
-    trader.sync_trades()
-    if not s.paused:
-        process(s)
+    try:
+        trader.sync_trades()
+    finally:  # an exchange hiccup while syncing must not stop new headlines being handled
+        if not s.paused:
+            process(s)
 
 
 def loop():
